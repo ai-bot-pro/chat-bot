@@ -12,14 +12,14 @@ from src.processors.aggregators.user_response import UserResponseAggregator
 from src.processors.aggregators.vision_image_frame import VisionImageFrameAggregator
 from src.processors.speech.tts.tts_processor import TTSProcessor
 from src.common.types import DailyParams
-from src.cmd.bots.base import DailyRoomBot
+from src.cmd.bots.base import AIRoomBot
 from src.transports.daily import DailyTransport
 from src.types.frames.data_frames import UserImageRawFrame
-from .. import register_daily_room_bots
+from .. import register_ai_room_bots
 
 
-@register_daily_room_bots.register
-class DailyMockVisionBot(DailyRoomBot):
+@register_ai_room_bots.register
+class DailyMockVisionBot(AIRoomBot):
     def __init__(self, **args) -> None:
         super().__init__(**args)
         self.init_bot_config()
@@ -59,6 +59,12 @@ class DailyMockVisionBot(DailyRoomBot):
             transport.capture_participant_video(participant["id"], framerate=0)
             image_requester.set_participant_id(participant["id"])
             await tts_processor.say("你好，欢迎使用 Vision Bot. 我是一名虚拟助手，可以结合视频进行提问。")
+        transport.add_event_handler(
+            "on_participant_left",
+            self.on_participant_left)
+        transport.add_event_handler(
+            "on_call_state_updated",
+            self.on_call_state_updated)
 
         pipeline = Pipeline([
             transport.input_processor(),
@@ -73,5 +79,5 @@ class DailyMockVisionBot(DailyRoomBot):
             transport.output_processor(),
             # llm_out_aggr,
         ])
-        task = PipelineTask(pipeline, params=PipelineParams())
-        await PipelineRunner().run(task)
+        self.task = PipelineTask(pipeline, params=PipelineParams())
+        await PipelineRunner().run(self.task)

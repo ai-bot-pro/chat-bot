@@ -7,22 +7,20 @@ from apipeline.pipeline.runner import PipelineRunner
 from src.processors.aggregators.llm_response import LLMAssistantResponseAggregator, LLMUserResponseAggregator
 from src.processors.llm.base import LLMProcessor
 from src.processors.speech.tts.tts_processor import TTSProcessor
-from src.modules.speech.vad_analyzer import VADAnalyzerEnvInit
-from src.common.types import DailyParams
-from src.transports.daily import DailyTransport
+from src.common.types import LivekitParams
+from src.transports.livekit import LivekitTransport
 from src.cmd.bots.base import AIRoomBot
 from src.cmd.bots import register_ai_room_bots
 from src.types.frames.data_frames import LLMMessagesFrame
 
 from dotenv import load_dotenv
-
 load_dotenv(override=True)
 
 
 @register_ai_room_bots.register
-class DailyBot(AIRoomBot):
+class LivekitBot(AIRoomBot):
     """
-    use asr processor, don't use daily transcirption
+    audio chat with livekit webRTC room bot
     """
 
     def __init__(self, **args) -> None:
@@ -30,14 +28,13 @@ class DailyBot(AIRoomBot):
         self.init_bot_config()
 
     async def arun(self):
-        vad_analyzer = VADAnalyzerEnvInit.initVADAnalyzerEngine()
-        self.daily_params = DailyParams(
+        vad_analyzer = self.get_vad_analyzer()
+        params = LivekitParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             vad_enabled=True,
             vad_analyzer=vad_analyzer,
             vad_audio_passthrough=True,
-            transcription_enabled=False,
         )
 
         asr_processor = self.get_asr_processor()
@@ -46,19 +43,19 @@ class DailyBot(AIRoomBot):
 
         tts_processor: TTSProcessor = self.get_tts_processor()
         stream_info = tts_processor.get_stream_info()
-        self.daily_params.audio_out_sample_rate = stream_info["sample_rate"]
-        self.daily_params.audio_out_channels = tts_processor.get_stream_info()["channels"]
+        params.audio_out_sample_rate = stream_info["sample_rate"]
+        params.audio_out_channels = tts_processor.get_stream_info()["channels"]
 
-        transport = DailyTransport(
-            self.args.room_url,
+        transport = LivekitTransport(
             self.args.token,
-            self.args.bot_name,
-            self.daily_params,
+            self.args.room_name,
+            params=params,
         )
 
         messages = []
         if self._bot_config.llm.messages:
             messages = self._bot_config.llm.messages
+
         user_response = LLMUserResponseAggregator(messages)
         assistant_response = LLMAssistantResponseAggregator(messages)
 
@@ -91,11 +88,7 @@ class DailyBot(AIRoomBot):
 
         await PipelineRunner().run(self.task)
 
-    async def on_first_participant_say_hi(self, transport: DailyTransport, participant):
-        self.session.set_client_id(participant["id"])
-        if self.daily_params.transcription_enabled:
-            transport.capture_participant_transcription(participant["id"])
-
+    async def on_first_participant_say_hi(self, transport: LivekitTransport, participant):
         # joined use tts say "hello" to introduce with llm generate
         if self._bot_config.tts \
                 and self._bot_config.llm \

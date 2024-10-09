@@ -4,14 +4,14 @@ from apipeline.pipeline.task import PipelineTask
 from apipeline.processors.logger import FrameLogger
 
 from src.common.types import DailyParams
-from src.cmd.bots.base import DailyRoomBot
+from src.cmd.bots.base import AIRoomBot
 from src.transports.daily import DailyTransport
 from src.types.frames.data_frames import UserImageRawFrame
-from .. import register_daily_room_bots
+from .. import register_ai_room_bots
 
 
-@register_daily_room_bots.register
-class DailyEchoVisionBot(DailyRoomBot):
+@register_ai_room_bots.register
+class DailyEchoVisionBot(AIRoomBot):
     async def arun(self):
         transport = DailyTransport(
             self.args.room_url, self.args.token, self.args.bot_name,
@@ -28,11 +28,17 @@ class DailyEchoVisionBot(DailyRoomBot):
         @transport.event_handler("on_first_participant_joined")
         async def on_first_participant_joined(transport, participant):
             transport.capture_participant_video(participant["id"])
+        transport.add_event_handler(
+            "on_participant_left",
+            self.on_participant_left)
+        transport.add_event_handler(
+            "on_call_state_updated",
+            self.on_call_state_updated)
 
         pipeline = Pipeline([
             transport.input_processor(),
             # FrameLogger(include_frame_types=[UserImageRawFrame]),
             transport.output_processor(),
         ])
-        task = PipelineTask(pipeline)
-        await PipelineRunner().run(task)
+        self.task = PipelineTask(pipeline)
+        await PipelineRunner().run(self.task)
